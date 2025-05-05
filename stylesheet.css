@@ -1,8 +1,72 @@
 body {
     display: flex;
     justify-content: center;
+    align-items: center;
     overflow: hidden;
     margin: 0;
-    height: 100%;
     width: 100%;
+    height: 100%;
+}
+
+#gameCanvas {
+    position: absolute;
+    z-index: 0;
+}
+
+#flashcardDiv {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1;
+    background-color: #f8f4ee;
+    width: 70vw;
+    height: 60vh;
+    border: 0.5vw solid black;
+    border-radius: 10%;
+    box-shadow: 0vw 0vh 1vw #ffffff;
+}
+
+#questionDiv {
+    position: absolute;
+    top: 15%;
+    display: flex;
+    justify-content: center;
+    align-items: center; 
+    z-index: 2;
+    width: 80%;
+    height: 35%;
+}
+
+#trackerDiv {
+    position: absolute;
+    top: 80%;
+    left: 80%;
+    display: flex;
+    justify-content: center;
+    align-items: center; 
+    z-index: 2;
+    width: 20%;
+    height: 10%;
+}
+
+#answerField {
+    position: absolute;
+    padding: 0;
+    top: 65%;
+    z-index: 3;
+    text-align: center;
+}
+
+.textInFlashcard {
+    text-align: center;
+    font-size: xx-large;
+    font-weight: bold;
+    z-index: 3;
+    color: black;
+    width: auto;
+    height: auto;
 }

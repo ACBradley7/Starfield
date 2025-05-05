@@ -1,7 +1,5 @@
 // Adjust everything based on resize?
 
-// Add flashcards
-
 // Stars
 // Add momentum slowing down on release
 // Add trails
@@ -10,19 +8,23 @@
 
 // Player
 // Add momentum on start and stop
-// Add getting hit by bullets / enemies / asteroids
+// Add getting hit by enemies / asteroids
 // Improve hurt animation
 
 // Enemies
 // Prevent enemies from grouping on top of each other ?
-// Add getting hit by player / enemies / asteroids
+// Add getting hit by asteroids
 
 // Bullets
-// Improve collision detection
+// Improve collision detection (check line from prev frame)
+
+// State
+// Add RESUMEGAME screen
 
 const APPSTATE = {
-    INGAME: "INGAME",
     FLASHCARDS: "FLASHCARDS",
+    RESUMEGAME: "RESUMEGAME",
+    INGAME: "INGAME",
     GAMEOVER: "GAMEOVER"
 }
 
@@ -59,6 +61,7 @@ let bullets = [];
 let collObjs = [];
 let objsByGrid = {};
 let objID = 1;
+let questData = { correct: 0, total: 3 };
 
 let CONTROLS = {};
 let FRAMECNT = 0;
@@ -71,6 +74,7 @@ const gridDivVal = 20;
 
 function setup() {
     canvas = createCanvas(window.innerWidth, window.innerHeight);
+    canvas.id("gameScreen");
 
     getCenterCoords();
     getCanvasRatio();
@@ -84,22 +88,36 @@ function draw() {
     background(0);
 
     if (appState == APPSTATE.FLASHCARDS) {
-        console.log("FC");
+        background(0);
+        dispStarsFlashcardState();
+
+        if (questData.correct == questData.total) {
+            removeFlashcardHTML();
+            appState = APPSTATE.INGAME;
+        }
+
     } else if (appState == APPSTATE.INGAME) {
         starsLogic();
         updateObjsByGrid();
         bulletsLogic();
         enemiesLogic();
         playerLogic();
+        
+        if (FRAMECNT == 100) {
+            appState = APPSTATE.FLASHCARDS;   
+            createFlashcardState();
+        }
+
     } else if (appState == APPSTATE.GAMEOVER) {
         console.log("GO");
     }
-
+    
     FRAMECNT += 1;
 }
 
 function setControls() {
     CONTROLS = {
+        SUBMITQUESTION: "Enter",                // Enter
         HYPERSPEED: 32,                         // Spacebar
         GAS: 87,                                // W
         ROTLEFT: 65,                            // A
@@ -334,13 +352,17 @@ class Enemy {
         }
     }
 
-    // hurtAnimation() {
-    //     push();
-    //     noStroke();
-    //     fill(this.hurtColor);
-    //     circle(this.x, this.y, this.radius + this.radius / 2);
-    //     pop();
-    // }
+    hurtAnim() {
+        if (this.playHurtAnim) {
+            push();
+            noStroke();
+            fill(this.hurtColor);
+            circle(this.x, this.y, this.radius + this.radius / 2);
+            pop();
+
+            this.playHurtAnim = false;
+        }
+    }
 }
 
 class Bullet {
@@ -554,6 +576,7 @@ function enemiesLoop() {
     for (let enemy of enemies) {
         enemy.calcMoveDir();
         enemy.move();
+        enemy.hurtAnim();
         enemy.display();
     }
 }
@@ -670,6 +693,129 @@ function getCanvasRatio() {
 
 function getCenterCoords() {
     centerPoint = { x: window.innerWidth / 2, y: window.innerHeight / 2};
+}
+
+function dispStarsFlashcardState() {
+    for (let i = 0; i < stars.length; i++) {
+        stars[i].display();
+    }
+}
+
+function createFlashcardState() {
+    questData = { correct: 0, total: randInt(2, 5) };
+
+    genFlashcardHTML();
+    genQuestionHandlerHTML();
+    genQuestTrackerHTML();
+}
+
+function genFlashcardHTML() {
+    flashcardDiv = createElement("div");
+    flashcardDiv.id("flashcardDiv");
+    flashcardDiv.parent(document.body);
+}
+
+function genQuestTrackerHTML() {
+    trackerDiv = createElement("div");
+    trackerDiv.id("trackerDiv");
+    trackerDiv.parent(document.getElementById("flashcardDiv"));
+
+    let text = `${questData.correct} / ${questData.total}`;
+
+    trackerText = createElement("p", text);
+    trackerText.id("questTrackerText");
+    trackerText.class("textInFlashCard");
+    trackerText.parent(trackerDiv);
+}
+
+function genQuestionHandlerHTML() {
+    let calcData = genCalculation();
+    genQuestionHTML(calcData);
+    genInputHTML(calcData);
+}
+
+function genCalculation() {
+    let numOne = randInt(1, 12);
+    let numTwo = randInt(1, 12);
+
+    let operations = ["*"];//, "/"];
+    let operation = randomChoice(operations);
+
+    let answer = eval(`${numOne} ${operation} ${numTwo}`);
+
+    return { numOne: numOne, numTwo: numTwo, op: operation, ans: answer };
+}
+
+function genQuestionHTML(calcData) {
+    questionDiv = createElement("div");
+    questionDiv.id("questionDiv");
+    questionDiv.parent(document.getElementById("flashcardDiv"));
+
+    let text = `${calcData.numOne} ${calcData.op} ${calcData.numTwo}`;
+
+    questionText = createElement("p", text);
+    questionText.id("questionText");
+    questionText.class("textInFlashcard");
+    questionText.parent(questionDiv);
+}
+
+function genInputHTML(calcData) {
+    let input = createInput();
+    input.id("answerField");
+    input.parent(document.getElementById("flashcardDiv"));
+    input.attribute("type", "text");
+    input.attribute("answer", calcData.ans)
+    input.size(200);
+    addAnswerFieldListener(input.elt, calcData);    
+}
+
+function addAnswerFieldListener(input, calcData) {
+    input.addEventListener("keydown", handler = (event) => {
+        if (event.key == CONTROLS.SUBMITQUESTION) {
+            checkAnswer(input, calcData.ans);
+        }
+    });
+}
+
+function checkAnswer(input, ans) {
+    if (input.value == ans) {
+        flashcardDiv = document.getElementById("flashcardDiv");
+        flashcardDiv.style.boxShadow = "0vw 0vh 3vw #00FF66";
+    } else {
+        flashcardDiv.style.boxShadow = "0vw 0vh 3vw #FF073A";
+    }
+    
+    setTimeout(() => {
+        flashcardDiv.style.boxShadow = "0 0 1vw #ffffff";
+    }, 300);
+    
+    
+    if (input.value == ans) {
+        questData.correct += 1;
+        text = document.getElementById("questTrackerText");
+        text.innerHTML = `${questData.correct} / ${questData.total}`;
+    }
+    
+    input.value = "";
+
+    if (questData.correct != questData.total) {
+        calcData = genCalculation();
+        newQuest(calcData);
+    }
+}
+
+function newQuest(calcData) {
+    questionText = document.getElementById("questionText");
+    questionText.innerHTML = `${calcData.numOne} ${calcData.op} ${calcData.numTwo}`;
+
+    input = document.getElementById("answerField");
+    input.removeEventListener("keydown", handler);
+    addAnswerFieldListener(input, calcData);
+}
+
+function removeFlashcardHTML() {
+    elt = document.getElementById("flashcardDiv");
+    elt.remove();
 }
 
 window.addEventListener("resize", () => {
