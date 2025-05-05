@@ -320,7 +320,7 @@ class Enemy {
         let dy = abs(player.y - this.y);
         let hypotenuse = sqrt(dx * dx + dy * dy);
 
-        if (circOnScreen(this)) {
+        if (circInCanvas(this)) {
             if (hypotenuse <= this.stopDist) {
                 return true;
             } else {
@@ -527,7 +527,7 @@ function updateObjsByGrid() {
     for (let obj of collObjs) {
         let pushObj = true;
 
-        if (circOnScreen(obj) == true) {
+        if (circInCanvas(obj) == true) {
             let squareX = Math.floor(obj.x / gridDivVal);
             let squareY = Math.floor(obj.y / gridDivVal);
 
@@ -636,9 +636,12 @@ function genStar() {
 }
 
 function shouldRemoveStar(star, index, removalArr) {
-    if (star.x > canvas.width + star.radius || star.x < 0 - star.radius) {
+    let scrWidth = window.screen.width;
+    let scrHeight = window.screen.height;
+
+    if (star.x > scrWidth + star.radius || star.x < 0 - star.radius) {
         removalArr.push(index);
-    } else if (star.y > canvas.height + star.radius || star.y < 0 - star.radius) {
+    } else if (star.y > scrHeight + star.radius || star.y < 0 - star.radius) {
         removalArr.push(index);
     }
     return removalArr
@@ -648,6 +651,10 @@ function removeStars(starsArr, removalArr) {
     for (let i = removalArr.length - 1; i >= 0; i--) {
         starsArr.splice(removalArr[i], 1);
     }
+}
+
+function removeAllStars() {
+    stars = [];
 }
 
 function genCenterStar() {
@@ -679,8 +686,19 @@ function randInt(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-function circOnScreen(obj) {
+function circInCanvas(obj) {
     if (obj.x - obj.radius > 0 && obj.x + obj.radius < canvas.width && obj.y - obj.radius > 0 && obj.y + obj.radius < canvas.height) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
+function circOnScreen(obj) {
+    let scrWidth = window.screen.width;
+    let scrHeight = window.screen.height;
+
+    if (obj.x - obj.radius > 0 && obj.x + obj.radius < scrWidth && obj.y - obj.radius > 0 && obj.y + obj.radius < scrHeight) {
         return true;
     } else {
         return false;
@@ -766,7 +784,7 @@ function genInputHTML(calcData) {
     input.attribute("type", "text");
     input.attribute("answer", calcData.ans)
     input.size(200);
-    addAnswerFieldListener(input.elt, calcData.ans);    
+    addAnswerFieldListener(input.elt, calcData);    
 }
 
 function addAnswerFieldListener(input, calcData) {
@@ -778,9 +796,12 @@ function addAnswerFieldListener(input, calcData) {
 }
 
 function checkAnswer(input, ans) {
-    flashcardDiv = document.getElementById("flashcardDiv");
+    let answer = ans.toString();
+    let val = input.value.toString();
 
-    if (input.value == ans) {
+    let flashcardDiv = document.getElementById("flashcardDiv");
+
+    if (val == answer) {
         flashcardDiv.style.boxShadow = "0vw 0vh 3vw #00FF66";
     } else {
         flashcardDiv.style.boxShadow = "0vw 0vh 3vw #FF073A";
@@ -791,7 +812,7 @@ function checkAnswer(input, ans) {
     }, 300);
     
     
-    if (input.value == ans) {
+    if (val == answer) {
         questData.correct += 1;
         text = document.getElementById("questTrackerText");
         text.innerHTML = `${questData.correct} / ${questData.total}`;
@@ -821,6 +842,11 @@ function removeFlashcardHTML() {
 
 window.addEventListener("resize", () => {
     resizeCanvas(window.innerWidth, window.innerHeight);
+
+    background(0);
+    removeAllStars();
+    genStarsCollection();
+
     getCenterCoords();
     getCanvasRatio();
 });
