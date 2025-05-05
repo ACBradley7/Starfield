@@ -766,7 +766,7 @@ function genInputHTML(calcData) {
     input.attribute("type", "text");
     input.attribute("answer", calcData.ans)
     input.size(200);
-    addAnswerFieldListener(input.elt, calcData);    
+    addAnswerFieldListener(input.elt, calcData.ans);    
 }
 
 function addAnswerFieldListener(input, calcData) {
@@ -778,8 +778,9 @@ function addAnswerFieldListener(input, calcData) {
 }
 
 function checkAnswer(input, ans) {
+    flashcardDiv = document.getElementById("flashcardDiv");
+
     if (input.value == ans) {
-        flashcardDiv = document.getElementById("flashcardDiv");
         flashcardDiv.style.boxShadow = "0vw 0vh 3vw #00FF66";
     } else {
         flashcardDiv.style.boxShadow = "0vw 0vh 3vw #FF073A";
