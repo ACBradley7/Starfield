@@ -16,7 +16,7 @@
 // Add getting hit by asteroids
 
 // Bullets
-// Improve collision detection (check line from prev frame)
+// explode on impact
 
 // State
 // Add RESUMEGAME screen
@@ -103,10 +103,10 @@ function draw() {
         enemiesLogic();
         playerLogic();
         
-        if (FRAMECNT == 100) {
-            appState = APPSTATE.FLASHCARDS;   
-            createFlashcardState();
-        }
+        // if (FRAMECNT == 100) {
+        //     appState = APPSTATE.FLASHCARDS;   
+        //     createFlashcardState();
+        // }
 
     } else if (appState == APPSTATE.GAMEOVER) {
         console.log("GO");
@@ -139,9 +139,11 @@ class Player {
         this.accentColor = "#b0b0b0";
         this.hurtColor = "#ff3b3b";
 
-        this.radius = 30;
+        this.radius = 20;
+        this.diam = this.radius * 2;
         this.x = centerPoint.x - this.radius / 2;
         this.y = centerPoint.y - this.radius / 2;
+        this.prevFramePos = { x: this.x, y: this.y };
         
         this.speed = 5;
         this.brakeVal = 0.1;
@@ -162,18 +164,21 @@ class Player {
     display() {
         push();
         fill("#fff300");
-        rect(this.front.x - 3, this.front.y - 3, 6, 6);
+        rect(this.front.x - 5, this.front.y - 15, 10, 10);
         pop();
 
         push();
-        strokeWeight(4);
+        strokeWeight(2);
         stroke(this.accentColor);
         fill(this.primaryColor);
-        circle(this.x, this.y, this.radius);
+        circle(this.x, this.y, this.diam);
         pop();
     }
 
     move() {
+        this.prevFramePos.x = this.x;
+        this.prevFramePos.y = this.y;
+
         if (keyIsDown(CONTROLS.GAS)) {
             this.x += this.dx * this.speed;
             this.y += this.dy * this.speed;
@@ -240,7 +245,7 @@ class Player {
             push();
             noStroke();
             fill(this.hurtColor);
-            circle(this.x, this.y, this.radius + this.radius / 2);
+            circle(this.x, this.y, this.diam + this.radius / 2);
             pop();
 
             this.playHurtAnim = false;
@@ -259,9 +264,11 @@ class Enemy {
         this.accentColor = "#b0b0b0";
         this.hurtColor = "#ff3b3b";
 
-        this.radius = 20;
+        this.radius = 15;
+        this.diam = this.radius * 2;
         this.x = 500;
         this.y = 500;
+        this.prevFramePos = { x: this.x, y: this.y };
 
         this.dx = 0;
         this.dy = 0;
@@ -302,11 +309,14 @@ class Enemy {
         strokeWeight(2);
         stroke(this.accentColor);
         fill(this.primaryColor);
-        circle(this.x, this.y, this.radius);
+        circle(this.x, this.y, this.diam);
         pop();
     }
 
     move() {
+        this.prevFramePos.x = this.x;
+        this.prevFramePos.y = this.y;
+
         if (this.shouldStop()) {
             this.autoAttack();
         } else {
@@ -357,7 +367,7 @@ class Enemy {
             push();
             noStroke();
             fill(this.hurtColor);
-            circle(this.x, this.y, this.radius + this.radius / 2);
+            circle(this.x, this.y, this.diam + this.radius / 2);
             pop();
 
             this.playHurtAnim = false;
@@ -373,6 +383,7 @@ class Bullet {
 
         this.x = obj.x + offsetX;
         this.y = obj.y + offsetY;
+        this.prevFramePos = { x: this.x, y: this.y };
         this.dx = 0;
         this.dy = 0;
 
@@ -392,11 +403,14 @@ class Bullet {
         strokeWeight(1);
         stroke(this.accentColor);
         fill(this.color);
-        circle(this.x, this.y, this.radius);
+        circle(this.x, this.y, this.diam);
         pop();
     }
 
     move() {
+        this.prevFramePos.x = this.x;
+        this.prevFramePos.y = this.y;
+
         this.x += this.dx;
         this.y += this.dy;
     }
@@ -424,23 +438,31 @@ class Bullet {
     }
 
     collisionCheckHandler() {
-        let neighbors = [
-            [0, 0] //, [-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [-1, 1], [1, -1], [1, 1]
+        const neighbors = [
+            [-1, 0], [1, 0], [0, -1], [0, 1],
+            [-1, -1], [-1, 1], [1, -1], [1, 1]
         ];
-        
-        for (let [dx, dy] of neighbors) {
-            if (this.collided) { break; }
-
-            let key = `${this.cell.x + dx},${this.cell.y + dy}`;
-            let objsToCheck = objsByGrid[key];
-
-            if (objsToCheck) {
-                for (let objToCheck of objsToCheck) {
-                    if (objToCheck.ID != this.ID && objToCheck.team != this.team && objToCheck.objType != OBJTYPE.BULLET) {
-                        this.circCollisionCheck(objToCheck);
-                        if (this.collided) { break; }
-                    }
-                }
+    
+        // Helper function to filter valid collision targets
+        const validTargets = (objs) => objs?.filter(obj =>
+            obj.ID !== this.ID &&
+            obj.team !== this.team &&
+            obj.objType !== OBJTYPE.BULLET
+        ) || [];
+    
+        // Check current cell
+        let key = `${this.cell.x},${this.cell.y}`;
+        for (let obj of validTargets(objsByGrid[key])) {
+            this.circCollisionCheck(obj);
+            if (this.collided) return;
+        }
+    
+        // Check neighboring cells based on previous frame position
+        for (let [dx, dy] of neighbors) {    
+            key = `${this.cell.x + dx},${this.cell.y + dy}`;
+            for (let obj of validTargets(objsByGrid[key])) {
+                this.prevFrameCircCollCheck(obj);
+                if (this.collided) return;
             }
         }
     }
@@ -458,17 +480,30 @@ class Bullet {
         }
     }
 
+    prevFrameCircCollCheck(obj) {
+        console.log(this.prevFramePos.x, obj.prevFramePos.x, this.x);
+
+        if (this.prevFramePos.x <= obj.prevFramePos.x <= this.x) {
+            if (this.prevFramePos.y <= obj.prevFramePos.y <= this.y) {
+                this.collided = true;
+                obj.playHurtAnim = true;
+            }
+        }
+    }
+
     getBulletInfo() {
         if (this.bullType == BULLTYPE.PLAYERBASIC) {
             this.color = "#00f0ff";
             this.accentColor = "99f9ff";
             this.radius = 6;
+            this.diam = this.radius * 2;
             this.speed = 10;
             this.team = TEAM.PLAYER;
         } else if (this.bullType == BULLTYPE.ALIENBASIC) {
             this.color = "#fff300";
             this.accentColor = "#ffff99";
             this.radius = 6;
+            this.diam = this.radius * 2;
             this.speed = 8;
             this.team = TEAM.ENEMY;
         }
@@ -479,8 +514,9 @@ class Star {
     constructor(x = Math.random() * canvas.width, y = Math.random() * canvas.height) {
         this.x = x;
         this.y = y;
-        this.radius = 3;
-        this.growth = 0.1;
+        this.radius = 1.5;
+        this.diam = this.radius * 2;
+        this.growth = 0.05;
         this.color = 255;
 
         this.dx = 0;
@@ -494,7 +530,9 @@ class Star {
     move() {
         this.x += this.dx;
         this.y += this.dy;
+
         this.radius += this.growth;
+        this.diam = this.radius * 2;
     }
 
     calcMoveDir() {
@@ -516,7 +554,7 @@ class Star {
         push();
         noStroke();
         fill(this.color);
-        circle(this.x, this.y, this.radius);
+        circle(this.x, this.y, this.diam);
         pop();
     }
 }
