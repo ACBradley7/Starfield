@@ -16,7 +16,7 @@
 // Add getting hit by asteroids
 
 // Bullets
-// explode on impact
+// Explode on impact
 
 // State
 // Add RESUMEGAME screen
