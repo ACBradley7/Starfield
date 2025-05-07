@@ -17,9 +17,12 @@
 
 // Bullets
 // Explode on impact
+// Collision detection
 
 // State
 // Add RESUMEGAME screen
+
+// #region Enums
 
 const APPSTATE = {
     FLASHCARDS: "FLASHCARDS",
@@ -50,6 +53,10 @@ const OBJTYPE = {
     BULLET: "BULLET"
 }
 
+// #endregion
+
+// #region Global Variables
+
 let appState = APPSTATE.INGAME;
 let canvas;
 let canvasRatio;
@@ -71,6 +78,10 @@ const enemyGenInterval = 2000;
 const genStarsPerFrame = 3;
 const enStopDists = [100, 200, 300, 400];
 const gridDivVal = 20;
+
+// #endregion
+
+// #region Game loop
 
 function setup() {
     canvas = createCanvas(window.innerWidth, window.innerHeight);
@@ -102,6 +113,7 @@ function draw() {
         bulletsLogic();
         enemiesLogic();
         playerLogic();
+        renderAll();
         
         // if (FRAMECNT == 100) {
         //     appState = APPSTATE.FLASHCARDS;   
@@ -115,6 +127,10 @@ function draw() {
     FRAMECNT += 1;
 }
 
+// #endregion
+
+// #region Setup
+
 function setControls() {
     CONTROLS = {
         SUBMITQUESTION: "Enter",                // Enter
@@ -127,6 +143,10 @@ function setControls() {
         BASICATTACK: 74                         // J
     }
 }
+
+// #endregion
+
+// #region Classes
 
 class Player {
     constructor() {
@@ -481,14 +501,40 @@ class Bullet {
     }
 
     prevFrameCircCollCheck(obj) {
-        console.log(this.prevFramePos.x, obj.prevFramePos.x, this.x);
+        let dx = this.prevFramePos.x - this.x;
+        let dy = this.prevFramePos.y - this.y;
 
-        if (this.prevFramePos.x <= obj.prevFramePos.x <= this.x) {
-            if (this.prevFramePos.y <= obj.prevFramePos.y <= this.y) {
-                this.collided = true;
-                obj.playHurtAnim = true;
-            }
+        let fx = obj.x - this.prevFramePos.x;
+        let fy = obj.y - this.prevFramePos.y;
+
+        let a = dx * dx + dy * dy;
+        let b = 2 * (fx * dx + fy * dy);
+        let c = fx * fx + fy * fy - this.radius * this.radius;
+
+        // Discriminant
+        let disc = b * b - 4 * a * c;
+
+        if (disc < 0) {
+            return;
         }
+
+        disc = Math.sqrt(disc);
+        let t1 = (-b + disc) / (2 * a);
+        let t2 = (-b - disc) / (2 * a);
+
+        if ((t1 >= 0 && t1 <= 1) || (t2 >= 0 && t2 <= 1)) {
+            this.collided = true;
+            obj.playHurtAnim = true;
+        }
+
+        // console.log(this.prevFramePos.x, obj.prevFramePos.x, this.x);
+
+        // if (this.prevFramePos.x <= obj.prevFramePos.x <= this.x) {
+        //     if (this.prevFramePos.y <= obj.prevFramePos.y <= this.y) {
+        //         this.collided = true;
+        //         obj.playHurtAnim = true;
+        //     }
+        // }
     }
 
     getBulletInfo() {
@@ -559,6 +605,86 @@ class Star {
     }
 }
 
+// #endregion
+
+// #region Rendering
+
+function renderAll() {
+    rendStars();
+    rendBullets();
+    rendEnemeis();
+    rendPlayer();
+}
+
+function rendStars() {
+    for (let star of stars) {
+        star.display();
+    }
+}
+
+function rendBullets() {
+    for (let bullet of bullets) {
+        bullet.display();
+    }
+}
+
+function rendEnemeis() {
+    for (let enemy of enemies) {
+        enemy.display();
+    }
+}
+
+function rendPlayer() {
+    player.display();
+}
+
+// #endregion
+
+// #region Physics
+
+function playerLogic() {
+    player.boost();
+    player.calcMoveDir();
+    player.calcFront();
+    player.move();
+    player.basicAttack();
+    player.hurtAnim();
+}
+
+function enemiesLogic() {
+    genEnemy();
+    enemiesLoop();
+}
+
+function genEnemy() {
+    if (FRAMECNT % enemyGenInterval == 0) {
+        e = new Enemy();
+        e.setSpawnLocation();
+    }
+}
+
+function enemiesLoop() {
+    for (let enemy of enemies) {
+        enemy.calcMoveDir();
+        enemy.move();
+        enemy.hurtAnim();
+    }
+}
+
+function bulletsLogic() {
+    for (let bullet of bullets) {
+        bullet.offScreenCheck();
+        bullet.collisionCheckHandler();
+        bullet.move();
+    }
+
+    for (let i = bullets.length - 1; i >= 0; i--) {
+        if (bullets[i].onScreen == false || bullets[i].collided == true) {
+            bullets.splice(i, 1);
+        }
+    }
+}
+
 function updateObjsByGrid() {
     objsByGrid = {};
 
@@ -588,52 +714,6 @@ function updateObjsByGrid() {
     }
 }
 
-function playerLogic() {
-    player.boost();
-    player.calcMoveDir();
-    player.calcFront();
-    player.move();
-    player.basicAttack();
-    player.hurtAnim();
-    player.display();
-}
-
-function enemiesLogic() {
-    genEnemy();
-    enemiesLoop();
-}
-
-function genEnemy() {
-    if (FRAMECNT % enemyGenInterval == 0) {
-        e = new Enemy();
-        e.setSpawnLocation();
-    }
-}
-
-function enemiesLoop() {
-    for (let enemy of enemies) {
-        enemy.calcMoveDir();
-        enemy.move();
-        enemy.hurtAnim();
-        enemy.display();
-    }
-}
-
-function bulletsLogic() {
-    for (let bullet of bullets) {
-        bullet.offScreenCheck();
-        bullet.collisionCheckHandler();
-        bullet.move();
-        bullet.display();
-    }
-
-    for (let i = bullets.length - 1; i >= 0; i--) {
-        if (bullets[i].onScreen == false || bullets[i].collided == true) {
-            bullets.splice(i, 1);
-        }
-    }
-}
-
 function starsLogic() {
     let starsToRemove = []
 
@@ -645,12 +725,15 @@ function starsLogic() {
         if (keyIsDown(CONTROLS.HYPERSPEED)) {
             stars[i].move();
         }
-        stars[i].display();
         starsToRemove = shouldRemoveStar(stars[i], i, starsToRemove);
     }
     
     if (starsToRemove) { removeStars(stars, starsToRemove); }
 }
+
+// #endregion
+
+// #region Stars
 
 function genStarsCollection() {
     for (let i = 0; i < 500; i++) {
@@ -714,6 +797,10 @@ function getStarOffset() {
     }
 }
 
+// #endregion
+
+// #region General/Library Functions
+
 function randomChoice(arr) {
     return arr[Math.floor(Math.random() * arr.length)];
 }
@@ -750,6 +837,21 @@ function getCanvasRatio() {
 function getCenterCoords() {
     centerPoint = { x: window.innerWidth / 2, y: window.innerHeight / 2};
 }
+
+window.addEventListener("resize", () => {
+    resizeCanvas(window.innerWidth, window.innerHeight);
+
+    background(0);
+    removeAllStars();
+    genStarsCollection();
+
+    getCenterCoords();
+    getCanvasRatio();
+});
+
+// #endregion
+
+// #region Flashcard Functions
 
 function dispStarsFlashcardState() {
     for (let i = 0; i < stars.length; i++) {
@@ -878,13 +980,4 @@ function removeFlashcardHTML() {
     elt.remove();
 }
 
-window.addEventListener("resize", () => {
-    resizeCanvas(window.innerWidth, window.innerHeight);
-
-    background(0);
-    removeAllStars();
-    genStarsCollection();
-
-    getCenterCoords();
-    getCanvasRatio();
-});
+// #endregion
