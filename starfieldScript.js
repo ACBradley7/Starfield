@@ -185,6 +185,8 @@ class Player {
     }
 
     display() {
+        this.calcFront();
+
         push();
         translate(this.front.x, this.front.y);
         rotate(this.theta);
