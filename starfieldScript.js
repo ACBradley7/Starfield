@@ -5,6 +5,7 @@
 // Add trails
 // Add twinkling
 // Add subtle movement on stop
+// Add image
 
 // Player
 // Add momentum on start and stop
@@ -14,10 +15,6 @@
 // Enemies
 // Prevent enemies from grouping on top of each other ?
 // Add getting hit by asteroids
-
-// Bullets
-// Explode on impact
-// Collision detection
 
 // State
 // Add RESUMEGAME screen
@@ -53,6 +50,10 @@ const OBJTYPE = {
     BULLET: "BULLET"
 }
 
+const PARTICLEFORCETYPE = {
+    CIRCLE: "CIRCLE"
+}
+
 // #endregion
 
 // #region Global Variables
@@ -60,12 +61,14 @@ const OBJTYPE = {
 let appState = APPSTATE.INGAME;
 let canvas;
 let canvasRatio;
+let scrDiagonal;
 let centerPoint = {};
-let stars = [];
 let player;
+let stars = [];
 let enemies = [];
 let bullets = [];
 let collObjs = [];
+let particleSystems = [];
 let objsByGrid = {};
 let objID = 1;
 let questData = { correct: 0, total: 3 };
@@ -77,7 +80,7 @@ const centStarGenInterval = 1;
 const enemyGenInterval = 2000;
 const genStarsPerFrame = 3;
 const enStopDists = [100, 200, 300, 400];
-const gridDivVal = 20;
+const gridDivVal = 50;
 
 // #endregion
 
@@ -88,7 +91,7 @@ function setup() {
     canvas.id("gameScreen");
 
     getCenterCoords();
-    getCanvasRatio();
+    getCanvasDimensions();
     setControls();
 
     player = new Player();
@@ -108,11 +111,7 @@ function draw() {
         }
 
     } else if (appState == APPSTATE.INGAME) {
-        starsLogic();
-        updateObjsByGrid();
-        bulletsLogic();
-        enemiesLogic();
-        playerLogic();
+        calcPhysics();
         renderAll();
         
         // if (FRAMECNT == 100) {
@@ -129,16 +128,17 @@ function draw() {
 
 // #endregion
 
-// #region Setup
+// #region Setup Functions
 
 function setControls() {
     CONTROLS = {
         SUBMITQUESTION: "Enter",                // Enter
         HYPERSPEED: 32,                         // Spacebar
         GAS: 87,                                // W
-        ROTLEFT: 65,                            // A
         BRAKE: 83,                              // S
+        ROTLEFT: 65,                            // A
         ROTRIGHT: 68,                           // D
+        TARGETSNAP: 186,                        // Semicolon
         BOOST: 16,                              // Left Shift
         BASICATTACK: 74                         // J
     }
@@ -164,13 +164,16 @@ class Player {
         this.x = centerPoint.x - this.radius / 2;
         this.y = centerPoint.y - this.radius / 2;
         this.prevFramePos = { x: this.x, y: this.y };
+        this.cell = { x: 0, y: 0 };
         
         this.speed = 5;
         this.brakeVal = 0.1;
         this.moveSpeed = this.speed;
         this.boostSpeed = this.speed * 1.5;
         
-        this.cell = { x: 0, y: 0 };
+        this.basicAttackReady = true;
+        this.basicAttackReadyTimer = 0;
+        this.basicAttackCooldown = 20;
 
         this.front = { x: this.x, y: this.y - this.radius};
         this.theta = 3 * PI / 2;
@@ -183,8 +186,11 @@ class Player {
 
     display() {
         push();
+        translate(this.front.x, this.front.y);
+        rotate(this.theta);
         fill("#fff300");
-        rect(this.front.x - 5, this.front.y - 15, 10, 10);
+        rectMode(CENTER);
+        rect(0, 0, 20, 20);
         pop();
 
         push();
@@ -237,17 +243,52 @@ class Player {
         }
     }
 
+    snapToTarget() {
+        if (keyIsDown(CONTROLS.TARGETSNAP)) {
+            let target = null;
+            let targetDist = scrDiagonal;
+        
+            // Check to see if objs in surrounding squares
+            // Check objs for closest distance
+            Object.keys(objsByGrid).forEach(key => {
+                    for (let obj of objsByGrid[key]) {
+                        if (obj.objType == OBJTYPE.SHIP && obj.ID != this.ID) {
+                            let dx = this.x - obj.x;
+                            let dy = this.y - obj.y;
+                            let distance = Math.sqrt(dx * dx + dy * dy);
+
+                            if (distance <= targetDist) {
+                                targetDist = distance;
+                                target = obj;
+                            }
+                        }
+                    }
+                });
+
+            // If target is found, snap to it
+            if (target) {
+                this.theta = angleToTarget(this.x, this.y, target.x, target.y);
+                this.calcFront();
+                return;
+            }
+        }
+    }
+
     basicAttack() {
         if (keyIsDown(CONTROLS.BASICATTACK)) {
-            let leftOffset = this.calcAttackOffset(-1);
-            let leftBullFront = { x: this.front.x + leftOffset.x, y: this.front.y + leftOffset.y}
-            let leftBull = new Bullet(this, BULLTYPE.PLAYERBASIC, leftOffset.x, leftOffset.y);
-            leftBull.calcMoveDir(leftBullFront);
-            
-            let rightOffset = this.calcAttackOffset(1);
-            let rightBullFront = { x: this.front.x + rightOffset.x, y: this.front.y + rightOffset.y}
-            let rightBull = new Bullet(this, BULLTYPE.PLAYERBASIC, rightOffset.x, rightOffset.y);
-            rightBull.calcMoveDir(rightBullFront);
+            if (this.basicAttackReady) {
+                this.basicAttackReady = false;
+
+                let leftOffset = this.calcAttackOffset(-1);
+                let leftBullFront = { x: this.front.x + leftOffset.x, y: this.front.y + leftOffset.y}
+                let leftBull = new Bullet(this, BULLTYPE.PLAYERBASIC, leftOffset.x, leftOffset.y);
+                leftBull.calcMoveDir(leftBullFront);
+                
+                let rightOffset = this.calcAttackOffset(1);
+                let rightBullFront = { x: this.front.x + rightOffset.x, y: this.front.y + rightOffset.y}
+                let rightBull = new Bullet(this, BULLTYPE.PLAYERBASIC, rightOffset.x, rightOffset.y);
+                rightBull.calcMoveDir(rightBullFront);
+            }
         }
     }
 
@@ -258,6 +299,16 @@ class Player {
         let coords = { x: offset * Math.cos(perpAngle), y: offset * Math.sin(perpAngle) }
 
         return coords;
+    }
+
+    incTimers() {
+        if (this.basicAttackReady == false) {
+            this.basicAttackReadyTimer += 1;
+            if (this.basicAttackReadyTimer >= this.basicAttackCooldown) {
+                this.basicAttackReadyTimer = 0;
+                this.basicAttackReady = true;
+            }
+        }
     }
 
     hurtAnim() {
@@ -436,19 +487,10 @@ class Bullet {
     }
 
     calcMoveDir(obj) {
-        let dx = obj.x - this.x;
-        let dy = obj.y - this.y;
-        let magnitude = Math.sqrt(dx * dx + dy * dy);
+        this.theta = angleToTarget(this.x, this.y, obj.x, obj.y);
 
-        this.theta = acos(dx / magnitude);
-
-        if (magnitude === 0) {
-            this.dx = 0;
-            this.dy = 0;
-        } else {
-            this.dx = (dx / magnitude) * this.speed;
-            this.dy = (dy / magnitude) * this.speed;
-        }
+        this.dx = cos(this.theta) * this.speed;
+        this.dy = sin(this.theta) * this.speed;
     }
 
     offScreenCheck() {
@@ -488,53 +530,47 @@ class Bullet {
     }
 
     circCollisionCheck(obj) {
-        const dx = this.x - obj.x;
-        const dy = this.y - obj.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-    
-        const sumOfRadii = this.radius + obj.radius;
+        let dx = this.x - obj.x;
+        let dy = this.y - obj.y;
+
+        let distance = Math.sqrt(dx * dx + dy * dy);
+        let sumOfRadii = this.radius + obj.radius;
     
         if (distance < sumOfRadii) {
-            this.collided = true;
-            obj.playHurtAnim = true;
+            this.collision(obj);
+            return;
         }
     }
 
     prevFrameCircCollCheck(obj) {
-        let dx = this.prevFramePos.x - this.x;
-        let dy = this.prevFramePos.y - this.y;
+        let dx = this.x - this.prevFramePos.x;
+        let dy = this.y - this.prevFramePos.y;
+        let sumOfRadii = this.radius + obj.radius;
+        let steps = 8;
 
-        let fx = obj.x - this.prevFramePos.x;
-        let fy = obj.y - this.prevFramePos.y;
+        for (let i = 1; i < steps; i++) {
+            let dxFrac = this.prevFramePos.x + dx * i / steps;
+            let dyFrac = this.prevFramePos.y + dy * i / steps;
 
-        let a = dx * dx + dy * dy;
-        let b = 2 * (fx * dx + fy * dy);
-        let c = fx * fx + fy * fy - this.radius * this.radius;
-
-        // Discriminant
-        let disc = b * b - 4 * a * c;
-
-        if (disc < 0) {
-            return;
+            let dxNew = dxFrac - obj.x;
+            let dyNew = dyFrac - obj.y;
+            let distance = Math.sqrt(dxNew * dxNew + dyNew * dyNew);
+        
+            if (distance < sumOfRadii) {
+                this.collision(obj);
+                return;
+            }
         }
+    }
 
-        disc = Math.sqrt(disc);
-        let t1 = (-b + disc) / (2 * a);
-        let t2 = (-b - disc) / (2 * a);
+    collision(obj) {
+        this.collided = true;
+        obj.playHurtAnim = true;
+        this.explode();
+    }
 
-        if ((t1 >= 0 && t1 <= 1) || (t2 >= 0 && t2 <= 1)) {
-            this.collided = true;
-            obj.playHurtAnim = true;
-        }
-
-        // console.log(this.prevFramePos.x, obj.prevFramePos.x, this.x);
-
-        // if (this.prevFramePos.x <= obj.prevFramePos.x <= this.x) {
-        //     if (this.prevFramePos.y <= obj.prevFramePos.y <= this.y) {
-        //         this.collided = true;
-        //         obj.playHurtAnim = true;
-        //     }
-        // }
+    explode() {
+        new ParticleSys(this.x, this.y, 10, 1, 8, 4, 10, 5, PI / 4, PARTICLEFORCETYPE.CIRCLE, "red");
     }
 
     getBulletInfo() {
@@ -543,7 +579,7 @@ class Bullet {
             this.accentColor = "99f9ff";
             this.radius = 6;
             this.diam = this.radius * 2;
-            this.speed = 10;
+            this.speed = 8;
             this.team = TEAM.PLAYER;
         } else if (this.bullType == BULLTYPE.ALIENBASIC) {
             this.color = "#fff300";
@@ -553,6 +589,98 @@ class Bullet {
             this.speed = 8;
             this.team = TEAM.ENEMY;
         }
+    }
+}
+
+class ParticleSys {
+    constructor(x, y, size, sizeVar, amount, speed, lifespan, lifespanVar, forceVar, forceType, color) {
+        this.initPos = { x: x, y: y};
+        this.size = size;
+        this.sizeVar = sizeVar;
+        this.amount = amount;
+        this.speed = speed;
+        this.lifespan = lifespan + lifespanVar;
+        this.lifespanVar = lifespanVar;
+        this.currLife = 0;
+        this.forceType = forceType;
+        this.forceVar = forceVar;
+        this.color = color;
+        this.particles = [];
+
+        this.calcParticleSysData(size, sizeVar, lifespan, lifespanVar);
+        particleSystems.push(this);
+    }
+    
+    calcParticleSysData(size, sizeVar, lifespan, lifespanVar) {
+        if (this.forceType == PARTICLEFORCETYPE.CIRCLE) {
+            this.genParticlesCircle(size, sizeVar, lifespan, lifespanVar);
+        }
+    }
+
+    genParticlesCircle(size, sizeVar, lifespan, lifespanVar) {
+        for (let i = 1; i <= this.amount; i++) {
+            let angle = (i / this.amount) * 2 * Math.PI;
+            angle += this.forceVar * Math.random() * randomChoice([-1, 1]);
+
+            let dirX = Math.cos(angle);
+            let dirY = Math.sin(angle);
+
+            let velX = dirX * this.speed;
+            let velY = dirY * this.speed;
+
+            let particle = new Particle(this.initPos.x, this.initPos.y, velX, velY, size, sizeVar, lifespan, lifespanVar, this.color)
+            this.particles.push(particle);
+        }
+    }
+
+    displayParticles() {
+        for (let particle of this.particles) {
+            particle.display();
+        }
+    }
+
+    removeParticles() {
+        if (this.currLife >= this.lifespan - this.lifespanVar) {
+            for (let i = this.particles.length - 1; i >= 0; i--) {
+                if (this.particles[i].currLife >= this.particles[i].lifespan) {
+                    this.particles.splice(i, 1);
+                } 
+            }
+        }
+    }
+
+    incLife() {
+        this.currLife += 1;
+    }
+}
+
+class Particle {
+    constructor(x, y, velX, velY, size, sizeVar, lifespan, lifespanVar, color) {
+        this.pos = { x: x, y: y };
+        this.vel = { x: velX, y: velY };
+        this.color = color;
+
+        this.size = size + sizeVar * Math.random() * randomChoice([-1, 1]);
+        this.lifespan = lifespan + lifespanVar * Math.random() * randomChoice([-1, 1]);
+
+        this.currLife = 0;
+    }
+
+    display() {
+        push();
+        noStroke();
+        fill(this.color);
+        circle(this.pos.x, this.pos.y, this.size);
+        pop();
+    }
+
+    updatePos() {
+        this.pos.x += this.vel.x;
+        this.pos.y += this.vel.y;
+    }
+
+    incLife() {
+        this.currLife += 1;
     }
 }
 
@@ -607,82 +735,15 @@ class Star {
 
 // #endregion
 
-// #region Rendering
+// #region Physics Functions
 
-function renderAll() {
-    rendStars();
-    rendBullets();
-    rendEnemeis();
-    rendPlayer();
-}
-
-function rendStars() {
-    for (let star of stars) {
-        star.display();
-    }
-}
-
-function rendBullets() {
-    for (let bullet of bullets) {
-        bullet.display();
-    }
-}
-
-function rendEnemeis() {
-    for (let enemy of enemies) {
-        enemy.display();
-    }
-}
-
-function rendPlayer() {
-    player.display();
-}
-
-// #endregion
-
-// #region Physics
-
-function playerLogic() {
-    player.boost();
-    player.calcMoveDir();
-    player.calcFront();
-    player.move();
-    player.basicAttack();
-    player.hurtAnim();
-}
-
-function enemiesLogic() {
-    genEnemy();
-    enemiesLoop();
-}
-
-function genEnemy() {
-    if (FRAMECNT % enemyGenInterval == 0) {
-        e = new Enemy();
-        e.setSpawnLocation();
-    }
-}
-
-function enemiesLoop() {
-    for (let enemy of enemies) {
-        enemy.calcMoveDir();
-        enemy.move();
-        enemy.hurtAnim();
-    }
-}
-
-function bulletsLogic() {
-    for (let bullet of bullets) {
-        bullet.offScreenCheck();
-        bullet.collisionCheckHandler();
-        bullet.move();
-    }
-
-    for (let i = bullets.length - 1; i >= 0; i--) {
-        if (bullets[i].onScreen == false || bullets[i].collided == true) {
-            bullets.splice(i, 1);
-        }
-    }
+function calcPhysics() {
+    updateObjsByGrid();
+    starsLogic();
+    bulletsLogic();
+    enemiesLogic();
+    playerLogic();
+    particlesLogic();
 }
 
 function updateObjsByGrid() {
@@ -731,9 +792,110 @@ function starsLogic() {
     if (starsToRemove) { removeStars(stars, starsToRemove); }
 }
 
+function bulletsLogic() {
+    for (let bullet of bullets) {
+        bullet.offScreenCheck();
+        bullet.collisionCheckHandler();
+        bullet.move();
+    }
+
+    for (let i = bullets.length - 1; i >= 0; i--) {
+        if (bullets[i].onScreen == false || bullets[i].collided == true) {
+            bullets.splice(i, 1);
+        }
+    }
+}
+
+function enemiesLogic() {
+    genEnemy();
+    enemiesLoop();
+}
+
+function genEnemy() {
+    if (FRAMECNT % enemyGenInterval == 0) {
+        e = new Enemy();
+        e.setSpawnLocation();
+    }
+}
+
+function enemiesLoop() {
+    for (let enemy of enemies) {
+        enemy.calcMoveDir();
+        enemy.move();
+        enemy.hurtAnim();
+    }
+}
+
+function playerLogic() {
+    player.boost();
+    player.calcMoveDir();
+    player.calcFront();
+    player.move();
+    player.snapToTarget();
+    player.basicAttack();
+    player.incTimers();
+    player.hurtAnim();
+}
+
+function particlesLogic() {
+    for (let i = particleSystems.length - 1; i >= 0; i--) {
+        particleSystems[i].incLife();
+        particleSystems[i].removeParticles();
+
+        for (let particle of particleSystems[i].particles) {
+            particle.updatePos();
+            particle.incLife();
+        }
+
+        if (particleSystems[i].currLife >= particleSystems[i].lifespan) {
+            particleSystems.splice(particleSystems[i], 1);
+        }
+    }
+}
+
 // #endregion
 
-// #region Stars
+// #region Rendering Functions
+
+function renderAll() {
+    rendStars();
+    rendBullets();
+    rendEnemeis();
+    rendPlayer();
+    rendParticles();
+}
+
+function rendStars() {
+    for (let star of stars) {
+        star.display();
+    }
+}
+
+function rendBullets() {
+    for (let bullet of bullets) {
+        bullet.display();
+    }
+}
+
+function rendEnemeis() {
+    for (let enemy of enemies) {
+        enemy.display();
+    }
+}
+
+function rendPlayer() {
+    player.display();
+}
+
+function rendParticles() {
+    for (let partSys of particleSystems) {
+        partSys.displayParticles();
+    }
+}
+
+// #endregion
+
+// #region Stars Functions
 
 function genStarsCollection() {
     for (let i = 0; i < 500; i++) {
@@ -801,6 +963,34 @@ function getStarOffset() {
 
 // #region General/Library Functions
 
+function angleToTarget(x1, y1, x2, y2) {
+    let dx = x2 - x1;
+    let dy = y2 - y1;
+    let magnitude = Math.sqrt(dx * dx + dy * dy);
+
+    if (magnitude === 0) return 0; // Avoid division by zero
+
+    // Normalize vector
+    let dirX = dx / magnitude;
+    let dirY = dy / magnitude;
+
+    // Reference direction (pointing right)
+    const refX = 1;
+    const refY = 0;
+
+    // Dot product (for angle magnitude)
+    let dot = dirX * refX + dirY * refY;
+    dot = Math.max(-1, Math.min(1, dot)); // Clamp due to floating point precision
+
+    let angle = Math.acos(dot); // radians [0, π]
+
+    // Cross product (for sign)
+    let cross = refX * dirY - refY * dirX;
+    if (cross < 0) angle = -angle;
+
+    return angle;
+}
+
 function randomChoice(arr) {
     return arr[Math.floor(Math.random() * arr.length)];
 }
@@ -830,8 +1020,9 @@ function circOnScreen(obj) {
     }
 }
 
-function getCanvasRatio() {
+function getCanvasDimensions() {
     canvasRatio = canvas.width / canvas.height;
+    scrDiagonal = Math.sqrt(canvas.width * canvas.width + canvas.height + canvas.height);
 }
 
 function getCenterCoords() {
@@ -846,7 +1037,7 @@ window.addEventListener("resize", () => {
     genStarsCollection();
 
     getCenterCoords();
-    getCanvasRatio();
+    getCanvasDimensions();
 });
 
 // #endregion
