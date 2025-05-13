@@ -481,13 +481,20 @@ class Bullet {
     }
 
     prevFrameCircCollCheck(obj) {
-        console.log(this.prevFramePos.x, obj.prevFramePos.x, this.x);
+        let dx = this.x - this.prevFramePos.x;
+        let dy = this.y - this.prevFramePos.y;
+        let distMag = Math.sqrt(dx * dx + dy * dy);
+        let sumOfRadii = this.radius + obj.radius
 
-        if (this.prevFramePos.x <= obj.prevFramePos.x <= this.x) {
-            if (this.prevFramePos.y <= obj.prevFramePos.y <= this.y) {
-                this.collided = true;
-                obj.playHurtAnim = true;
-            }
+        let inRangeX = (this.prevFramePos.x <= obj.prevFramePos.x && obj.prevFramePos.x <= this.x) ||
+        (this.prevFramePos.x >= obj.prevFramePos.x && obj.prevFramePos.x >= this.x);
+
+        let inRangeY = (this.prevFramePos.y <= obj.prevFramePos.y && obj.prevFramePos.y <= this.y) ||
+                (this.prevFramePos.y >= obj.prevFramePos.y && obj.prevFramePos.y >= this.y);
+
+        if (inRangeX && inRangeY) {
+            this.collided = true;
+            obj.playHurtAnim = true;
         }
     }
 
