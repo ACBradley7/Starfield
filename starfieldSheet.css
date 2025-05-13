@@ -1,15 +1,8 @@
-html {
-    height: 100%;
-}
-
 body {
-    display: flex;
-    justify-content: center;
-    align-items: center;
     overflow: hidden;
-    margin: 0;
     width: 100vw;
     height: 100vh;
+    margin: 0;
 }
 
 #gameCanvas {
@@ -26,9 +19,9 @@ body {
     background-color: #f8f4ee;
     width: 70vw;
     height: 60vh;
-    border: 0.3vw solid black;
-    border-radius: 5%;
-    box-shadow: 0vw 0vh 2vw #ffffff;
+    border: 0.5vw solid black;
+    border-radius: 10%;
+    box-shadow: 0vw 0vh 1vw #ffffff;
 }
 
 #questionDiv {
