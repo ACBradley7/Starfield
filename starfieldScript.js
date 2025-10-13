@@ -77,7 +77,7 @@ let CONTROLS = {};
 let FRAMECNT = 0;
 
 const centStarGenInterval = 1;
-const enemyGenInterval = 2000;
+const enemyGenInterval = 300;
 const genStarsPerFrame = 3;
 const enStopDists = [100, 200, 300, 400];
 const gridDivVal = 50;
@@ -113,6 +113,7 @@ function draw() {
     } else if (appState == APPSTATE.INGAME) {
         calcPhysics();
         renderAll();
+        gameOverCheck();
         
         // if (FRAMECNT == 100) {
         //     appState = APPSTATE.FLASHCARDS;   
@@ -120,7 +121,8 @@ function draw() {
         // }
 
     } else if (appState == APPSTATE.GAMEOVER) {
-        console.log("GO");
+        gameOverCheck();
+        return;
     }
     
     FRAMECNT += 1;
@@ -180,6 +182,9 @@ class Player {
         this.rotVal = 0.1;
 
         this.playHurtAnim = false;
+        
+        this.health = 3;
+        this.isDead = false;
 
         collObjs.push(this);
     }
@@ -201,6 +206,16 @@ class Player {
         fill(this.primaryColor);
         circle(this.x, this.y, this.diam);
         pop();
+    }
+
+    displayHealth() {
+        for (let i = 0; i < this.health; i++) {
+            push();
+            fill("red");
+            stroke(255);
+            circle(canvas.width * 7 / 8 + this.diam * i, canvas.height * 1 / 16, this.diam / 3);
+            pop();
+        }
     }
 
     move() {
@@ -324,6 +339,16 @@ class Player {
             this.playHurtAnim = false;
         }
     }
+
+    loseHealth() {
+        this.health -= 1;
+    }
+
+    hasDied() {
+        if (this.health <= 0) {
+            this.isDead = true;
+        }
+    }
 }
 
 class Enemy {
@@ -352,6 +377,9 @@ class Enemy {
 
         this.stopDist = randomChoice(enStopDists);
         this.baseAutoAttackRate = 30;
+        
+        this.health = 1;
+        this.isDead = false;
 
         enemies.push(this);
         collObjs.push(this);
@@ -444,6 +472,16 @@ class Enemy {
             pop();
 
             this.playHurtAnim = false;
+        }
+    }
+
+    loseHealth() {
+        this.health -= 1;
+    }
+
+    hasDied() {
+        if (this.health <= 0) {
+            this.isDead = true;
         }
     }
 }
@@ -567,7 +605,11 @@ class Bullet {
 
     collision(obj) {
         this.collided = true;
-        obj.playHurtAnim = true;
+        if (obj.objType == OBJTYPE.SHIP) {
+            obj.playHurtAnim = true;
+            obj.loseHealth();
+            obj.hasDied();
+        }
         this.explode();
     }
 
@@ -746,6 +788,7 @@ function calcPhysics() {
     enemiesLogic();
     playerLogic();
     particlesLogic();
+    removeDead();
 }
 
 function updateObjsByGrid() {
@@ -850,9 +893,42 @@ function particlesLogic() {
         }
 
         if (particleSystems[i].currLife >= particleSystems[i].lifespan) {
-            particleSystems.splice(particleSystems[i], 1);
+            particleSystems.splice(i, 1);
         }
     }
+}
+
+function removeDead() {
+    for (let i = enemies.length - 1; i >= 0; i--) {
+        if (enemies[i].isDead) {
+            enemies.splice(i, 1);
+        }
+    }
+
+    for (let i = collObjs.length - 1; i >= 0; i--) {
+        if (collObjs[i].objType == OBJTYPE.SHIP) {
+            if (collObjs[i].isDead) {
+                collObjs.splice(i, 1);
+            }
+        }
+    }
+}
+
+function gameOverCheck() {
+    if (player.isDead) {
+        dispGameOver();
+        appState = APPSTATE.GAMEOVER;
+    }
+}
+
+function dispGameOver() {
+    push();
+    textSize(48);
+    textStyle(BOLD);
+    fill(255);
+    textAlign(CENTER);
+    text("Game Over...", centerPoint.x, canvas.height * 1 / 3);
+    pop();
 }
 
 // #endregion
@@ -865,6 +941,7 @@ function renderAll() {
     rendEnemeis();
     rendPlayer();
     rendParticles();
+    removeDead();
 }
 
 function rendStars() {
@@ -887,6 +964,7 @@ function rendEnemeis() {
 
 function rendPlayer() {
     player.display();
+    player.displayHealth();
 }
 
 function rendParticles() {
@@ -1024,7 +1102,7 @@ function circOnScreen(obj) {
 
 function getCanvasDimensions() {
     canvasRatio = canvas.width / canvas.height;
-    scrDiagonal = Math.sqrt(canvas.width * canvas.width + canvas.height + canvas.height);
+    scrDiagonal = Math.sqrt(canvas.width * canvas.width + canvas.height * canvas.height);
 }
 
 function getCenterCoords() {
