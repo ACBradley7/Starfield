@@ -81,6 +81,7 @@ const enemyGenInterval = 300;
 const genStarsPerFrame = 3;
 const enStopDists = [100, 200, 300, 400];
 const gridDivVal = 50;
+const winDist = 500;
 
 // #endregion
 
@@ -121,7 +122,7 @@ function draw() {
         // }
 
     } else if (appState == APPSTATE.GAMEOVER) {
-        gameOverCheck();
+        dispGameOver();
         return;
     }
     
@@ -183,8 +184,11 @@ class Player {
 
         this.playHurtAnim = false;
         
-        this.health = 3;
+        this.health = 4;
         this.isDead = false;
+
+        this.distTraveled = 0;
+        this.hasWon = false;
 
         collObjs.push(this);
     }
@@ -216,6 +220,19 @@ class Player {
             circle(canvas.width * 7 / 8 + this.diam * i, canvas.height * 1 / 16, this.diam / 3);
             pop();
         }
+    }
+
+    displayDistTraveled() {
+        push();
+        fill(255);
+        rect(canvas.width * 1 / 16, canvas.height * 1 / 16, canvas.width / 8, canvas.height / 64);
+        pop();
+
+        push();
+        fill("#66ff66");
+        console.log(canvas.width / 8 - (this.distTraveled / winDist));
+        rect(canvas.width * 1 / 16, canvas.height * 1 / 16, (this.distTraveled / winDist) * (canvas.width / 8), canvas.height / 64);
+        pop();
     }
 
     move() {
@@ -349,6 +366,18 @@ class Player {
             this.isDead = true;
         }
     }
+
+    moveForward() {
+        if (keyIsDown(CONTROLS.HYPERSPEED) && enemies.length == 0) {
+            this.distTraveled += 1;
+        }
+    }
+
+    checkGameWon() {
+        if (this.distTraveled >= winDist) {
+            this.hasWon = true;
+        }
+    }
 }
 
 class Enemy {
@@ -386,7 +415,7 @@ class Enemy {
     }
 
     setSpawnLocation() {
-        let offset = 200;
+        let offset = this.diam;
         let choices = [DIRS.NORTH, DIRS.EAST, DIRS.SOUTH, DIRS.WEST];
         let choice = randomChoice(choices);
     
@@ -823,12 +852,12 @@ function updateObjsByGrid() {
 function starsLogic() {
     let starsToRemove = []
 
-    if (keyIsDown(CONTROLS.HYPERSPEED)) {
+    if (keyIsDown(CONTROLS.HYPERSPEED) && enemies.length == 0) {
         genStars();
     }
 
     for (let i = 0; i < stars.length; i++) {
-        if (keyIsDown(CONTROLS.HYPERSPEED)) {
+        if (keyIsDown(CONTROLS.HYPERSPEED) && enemies.length == 0) {
             stars[i].move();
         }
         starsToRemove = shouldRemoveStar(stars[i], i, starsToRemove);
@@ -880,6 +909,8 @@ function playerLogic() {
     player.basicAttack();
     player.incTimers();
     player.hurtAnim();
+    player.moveForward();
+    player.checkGameWon();
 }
 
 function particlesLogic() {
@@ -916,18 +947,39 @@ function removeDead() {
 
 function gameOverCheck() {
     if (player.isDead) {
-        dispGameOver();
+        dispLoss();
+        appState = APPSTATE.GAMEOVER;
+    } else if (player.hasWon) {
+        dispWin();
         appState = APPSTATE.GAMEOVER;
     }
 }
 
 function dispGameOver() {
+    if (player.isDead) {
+        dispLoss();
+    } else if (player.hasWon) {
+        dispWin();
+    }
+}
+
+function dispLoss() {
     push();
     textSize(48);
     textStyle(BOLD);
     fill(255);
     textAlign(CENTER);
     text("Game Over...", centerPoint.x, canvas.height * 1 / 3);
+    pop();
+}
+
+function dispWin() {
+    push();
+    textSize(48);
+    textStyle(BOLD);
+    fill(255);
+    textAlign(CENTER);
+    text("You Win!", centerPoint.x, canvas.height * 1 / 3);
     pop();
 }
 
@@ -964,6 +1016,7 @@ function rendEnemeis() {
 
 function rendPlayer() {
     player.display();
+    player.displayDistTraveled();
     player.displayHealth();
 }
 
